@@ -14,29 +14,46 @@ import org.mozilla.javascript.*;
 public class JSInterpreterSimple implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(JSInterpreterSimple.class);
     
-    private final Context jsContext;
-    private final ScriptableObject jsScope;
+    private Context jsContext;
+    private ScriptableObject jsScope;
     private final MongoClient mongoClient;
-    private final MongoCommandTranslator translator;
-    private final ObjectMapper objectMapper;
+    private MongoCommandTranslator translator;
+    private ObjectMapper objectMapper;
     private MongoDatabase currentDatabase;
     private CursorProxySimple lastCursor;
+    private final boolean ownsMongoClient;
     
     public JSInterpreterSimple(String connectionString) {
         try {
             this.mongoClient = MongoClients.create(connectionString);
-            this.translator = new MongoCommandTranslator(mongoClient);
-            this.objectMapper = new ObjectMapper();
-            this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
-            
-            this.jsContext = Context.enter();
-            this.jsScope = jsContext.initStandardObjects();
-            
-            initializeMongoShellEnvironment();
+            this.ownsMongoClient = true;
+            init();
         } catch (Exception e) {
             logger.error("JavaScript interpreter initialization failed", e);
             throw new RuntimeException("Failed to initialize JavaScript interpreter: " + e.getMessage(), e);
         }
+    }
+    
+    public JSInterpreterSimple(MongoClient mongoClient) {
+        try {
+            this.mongoClient = mongoClient;
+            this.ownsMongoClient = false;
+            init();
+        } catch (Exception e) {
+            logger.error("JavaScript interpreter initialization failed", e);
+            throw new RuntimeException("Failed to initialize JavaScript interpreter: " + e.getMessage(), e);
+        }
+    }
+    
+    private void init() {
+        this.translator = new MongoCommandTranslator(mongoClient);
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
+        
+        this.jsContext = Context.enter();
+        this.jsScope = jsContext.initStandardObjects();
+        
+        initializeMongoShellEnvironment();
     }
     
     private void initializeMongoShellEnvironment() {
@@ -210,7 +227,7 @@ public class JSInterpreterSimple implements AutoCloseable {
             if (jsContext != null) {
                 Context.exit();
             }
-            if (mongoClient != null) {
+            if (ownsMongoClient && mongoClient != null) {
                 mongoClient.close();
             }
         } catch (Exception e) {

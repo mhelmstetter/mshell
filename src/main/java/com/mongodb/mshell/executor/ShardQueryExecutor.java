@@ -52,18 +52,16 @@ public class ShardQueryExecutor implements AutoCloseable {
     private void initializeShardConnections() {
         try {
             Map<String, MongoClient> shardClients = shardClient.getShardMongoClients();
-            Map<String, Shard> shardsMap = shardClient.getShardsMap();
             
-            for (Map.Entry<String, Shard> entry : shardsMap.entrySet()) {
+            for (Map.Entry<String, MongoClient> entry : shardClients.entrySet()) {
                 String shardName = entry.getKey();
-                Shard shard = entry.getValue();
-                String shardHost = shard.getHost();
+                MongoClient mongoClient = entry.getValue();
                 
-                String shardConnectionString = formatShardConnectionString(shardHost);
-                JSInterpreterSimple interpreter = new JSInterpreterSimple(shardConnectionString);
+                // Use the existing MongoClient that ShardClient created with proper connection params
+                JSInterpreterSimple interpreter = new JSInterpreterSimple(mongoClient);
                 shardInterpreters.put(shardName, interpreter);
                 
-                logger.info("Initialized connection to shard: {} at {}", shardName, shardHost);
+                logger.info("Initialized interpreter for shard: {}", shardName);
             }
         } catch (Exception e) {
             logger.error("Failed to initialize shard connections", e);
@@ -71,19 +69,6 @@ public class ShardQueryExecutor implements AutoCloseable {
         }
     }
     
-    private String formatShardConnectionString(String shardHost) {
-        if (shardHost.startsWith("mongodb://")) {
-            return shardHost;
-        }
-        
-        if (shardHost.contains("/")) {
-            String replicaSetName = shardHost.substring(0, shardHost.indexOf("/"));
-            String hosts = shardHost.substring(shardHost.indexOf("/") + 1);
-            return "mongodb://" + hosts + "/?replicaSet=" + replicaSetName;
-        }
-        
-        return "mongodb://" + shardHost;
-    }
     
     public void executeOnAllShards(String command) {
         if (shardInterpreters.isEmpty()) {
