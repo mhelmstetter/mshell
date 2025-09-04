@@ -8,8 +8,10 @@ import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.mozilla.javascript.regexp.NativeRegExp;
 
 import java.util.*;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class MongoCommandTranslator {
@@ -338,10 +340,67 @@ public class MongoCommandTranslator {
         }
         if (obj instanceof Map) {
             Document doc = new Document();
-            ((Map<?, ?>) obj).forEach((k, v) -> doc.put(String.valueOf(k), v));
+            ((Map<?, ?>) obj).forEach((k, v) -> doc.put(String.valueOf(k), convertValue(v)));
             return doc;
         }
         return Document.parse(obj.toString());
+    }
+    
+    private Object convertValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        
+        // Handle JavaScript regex objects
+        if (value instanceof NativeRegExp) {
+            NativeRegExp nativeRegex = (NativeRegExp) value;
+            String pattern = nativeRegex.toString();
+            
+            // Extract pattern and flags from /pattern/flags format
+            if (pattern.startsWith("/") && pattern.lastIndexOf("/") > 0) {
+                int lastSlash = pattern.lastIndexOf("/");
+                String regexPattern = pattern.substring(1, lastSlash);
+                String flags = pattern.substring(lastSlash + 1);
+                
+                // Convert to MongoDB regex format
+                Document regexDoc = new Document("$regex", regexPattern);
+                if (!flags.isEmpty()) {
+                    regexDoc.put("$options", flags);
+                }
+                return regexDoc;
+            }
+            
+            // Fallback - just use the pattern as string
+            return new Document("$regex", pattern);
+        }
+        
+        // Handle other Rhino objects that need conversion
+        if (value.getClass().getName().startsWith("org.mozilla.javascript.")) {
+            // For other JavaScript objects, try to convert to string
+            return value.toString();
+        }
+        
+        // Handle nested objects
+        if (value instanceof Map) {
+            Document doc = new Document();
+            ((Map<?, ?>) value).forEach((k, v) -> doc.put(String.valueOf(k), convertValue(v)));
+            return doc;
+        }
+        
+        if (value instanceof List) {
+            return ((List<?>) value).stream()
+                .map(this::convertValue)
+                .collect(Collectors.toList());
+        }
+        
+        if (value instanceof Object[]) {
+            return Arrays.stream((Object[]) value)
+                .map(this::convertValue)
+                .collect(Collectors.toList());
+        }
+        
+        // Return as-is for primitive types and other objects
+        return value;
     }
     
     private List<Document> toDocumentList(Object obj) {
