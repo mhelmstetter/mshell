@@ -82,6 +82,21 @@ public class DatabaseProxySimple extends ScriptableObject {
                     }
                 };
                 
+            case "getCollection":
+                return new BaseFunction() {
+                    @Override
+                    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                        if (args.length > 0) {
+                            String collectionName = args[0].toString();
+                            CollectionProxySimple collection = new CollectionProxySimple(translator, collectionName);
+                            collection.setParentScope(thisObj.getParentScope());
+                            collection.setPrototype(ScriptableObject.getObjectPrototype(thisObj.getParentScope()));
+                            return collection;
+                        }
+                        return "Collection name required";
+                    }
+                };
+                
             default:
                 // Return a collection proxy for any other property access
                 return collections.computeIfAbsent(name, k -> {

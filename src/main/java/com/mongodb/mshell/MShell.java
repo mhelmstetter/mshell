@@ -1,7 +1,9 @@
 package com.mongodb.mshell;
 
+import com.mongodb.ConnectionString;
 import com.mongodb.mshell.interpreter.JSInterpreterSimple;
 import com.mongodb.mshell.executor.ShardQueryExecutor;
+import com.mongodb.util.MaskUtil;
 import org.apache.commons.cli.*;
 import org.jline.reader.*;
 import org.jline.terminal.Terminal;
@@ -47,7 +49,7 @@ public class MShell {
                 
         System.out.println("MongoDB Shell (mshell) - Java Edition");
         System.out.println("Type 'help()' for help, 'exit' or 'quit' to exit");
-        System.out.println("Connected to: " + connectionString);
+        System.out.println("Connected to: " + MaskUtil.maskConnectionString(new ConnectionString(connectionString)));
         if (executeOnShards) {
             System.out.println("Shard execution mode: ENABLED");
         }

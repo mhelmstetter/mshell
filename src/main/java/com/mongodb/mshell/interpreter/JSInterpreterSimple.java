@@ -183,6 +183,10 @@ public class JSInterpreterSimple implements AutoCloseable {
         command = command.replaceAll("\\bshow\\s+tables\\b", "show('tables')");
         command = command.replaceAll("\\bshow\\s+users\\b", "show('users')");
         
+        // Handle dotted collection names by converting db.collection.name.method to db.getCollection('collection.name').method
+        // This regex finds patterns like db.rollup.site_daily_stats.count and converts them properly
+        command = command.replaceAll("\\bdb\\.([a-zA-Z_][a-zA-Z0-9_]*\\.[a-zA-Z_][a-zA-Z0-9_\\.]*)\\.([a-zA-Z_][a-zA-Z0-9_]*)", "db.getCollection('$1').$2");
+        
         return command;
     }
     
