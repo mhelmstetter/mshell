@@ -83,6 +83,7 @@ public class ShardQueryExecutor implements AutoCloseable {
         }
         
         List<Future<ShardResult>> futures = new ArrayList<>();
+        List<String> shardNames = new ArrayList<>();
         
         for (Map.Entry<String, JSInterpreterSimple> entry : shardInterpreters.entrySet()) {
             String shardName = entry.getKey();
@@ -98,16 +99,22 @@ public class ShardQueryExecutor implements AutoCloseable {
             });
             
             futures.add(future);
+            shardNames.add(shardName);
         }
         
-        for (Future<ShardResult> future : futures) {
+        // Process results maintaining shard name context for errors  
+        for (int i = 0; i < futures.size(); i++) {
+            Future<ShardResult> future = futures.get(i);
+            String shardName = shardNames.get(i);
+            
             try {
-                ShardResult result = future.get(30, TimeUnit.SECONDS);
+                // Remove the hardcoded timeout - let queries run as long as they need
+                // Only connection timeouts should be configured, not query timeouts
+                ShardResult result = future.get();
                 printShardResult(result);
-            } catch (TimeoutException e) {
-                System.err.println("Timeout waiting for shard response");
             } catch (Exception e) {
-                System.err.println("Error getting shard result: " + e.getMessage());
+                System.err.println("\n=== Shard: " + shardName + " ===");
+                System.err.println("ERROR: " + e.getMessage());
             }
         }
     }
