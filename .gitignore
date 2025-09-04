@@ -1,4 +1,6 @@
 CLAUDE.md
-bin/
+bin/*.class
+bin/com/
+bin/logback.xml
 target/
 dependency-reduced-pom.xml
