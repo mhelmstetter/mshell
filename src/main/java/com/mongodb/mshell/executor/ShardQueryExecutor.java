@@ -16,10 +16,16 @@ public class ShardQueryExecutor implements AutoCloseable {
     private final ShardClient shardClient;
     private final Map<String, JSInterpreterSimple> shardInterpreters;
     private final ExecutorService executorService;
+    private final boolean verbose;
     
     public ShardQueryExecutor(String connectionString) {
+        this(connectionString, false);
+    }
+    
+    public ShardQueryExecutor(String connectionString, boolean verbose) {
         try {
             logger.info("Initializing ShardQueryExecutor with connection: '{}'", connectionString);
+            this.verbose = verbose;
             String sourceClusterId = "source";
             
             logger.debug("Creating ShardClient with name='{}' and clusterUri='{}'", sourceClusterId, connectionString);
@@ -58,7 +64,7 @@ public class ShardQueryExecutor implements AutoCloseable {
                 MongoClient mongoClient = entry.getValue();
                 
                 // Use the existing MongoClient that ShardClient created with proper connection params
-                JSInterpreterSimple interpreter = new JSInterpreterSimple(mongoClient);
+                JSInterpreterSimple interpreter = new JSInterpreterSimple(mongoClient, verbose);
                 shardInterpreters.put(shardName, interpreter);
                 
                 logger.info("Initialized interpreter for shard: {}", shardName);

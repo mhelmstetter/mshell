@@ -112,4 +112,9 @@ public class DatabaseProxySimple extends ScriptableObject {
     public boolean has(String name, Scriptable start) {
         return true; // Allow access to any collection name
     }
+    
+    @Override
+    public String toString() {
+        return translator.getCurrentDatabaseName();
+    }
 }

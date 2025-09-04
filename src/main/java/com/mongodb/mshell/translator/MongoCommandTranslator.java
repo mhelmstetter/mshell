@@ -19,9 +19,15 @@ public class MongoCommandTranslator {
     
     private final MongoClient mongoClient;
     private MongoDatabase currentDatabase;
+    private final boolean verbose;
     
     public MongoCommandTranslator(MongoClient mongoClient) {
+        this(mongoClient, false);
+    }
+    
+    public MongoCommandTranslator(MongoClient mongoClient, boolean verbose) {
         this.mongoClient = mongoClient;
+        this.verbose = verbose;
     }
     
     public void setCurrentDatabase(MongoDatabase database) {
@@ -222,8 +228,20 @@ public class MongoCommandTranslator {
             return 0;
         }
         
+        Document filterDoc = toDocument(filter);
+        if (verbose) {
+            System.out.println("VERBOSE: countDocuments query:");
+            System.out.println("  Collection: " + currentDatabase.getName() + "." + collectionName);
+            try {
+                System.out.println("  Filter: " + filterDoc.toJson());
+            } catch (Exception e) {
+                // Fallback if toJson() fails
+                System.out.println("  Filter: " + filterDoc.toString());
+            }
+        }
+        
         return currentDatabase.getCollection(collectionName)
-            .countDocuments(toDocument(filter));
+            .countDocuments(filterDoc);
     }
     
     public List<Document> aggregate(String collectionName, Object pipeline) {

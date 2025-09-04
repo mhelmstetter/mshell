@@ -22,11 +22,17 @@ public class JSInterpreterSimple implements AutoCloseable {
     private MongoDatabase currentDatabase;
     private CursorProxySimple lastCursor;
     private final boolean ownsMongoClient;
+    private final boolean verbose;
     
     public JSInterpreterSimple(String connectionString) {
+        this(connectionString, false);
+    }
+    
+    public JSInterpreterSimple(String connectionString, boolean verbose) {
         try {
             this.mongoClient = MongoClients.create(connectionString);
             this.ownsMongoClient = true;
+            this.verbose = verbose;
             init();
         } catch (Exception e) {
             logger.error("JavaScript interpreter initialization failed", e);
@@ -35,9 +41,14 @@ public class JSInterpreterSimple implements AutoCloseable {
     }
     
     public JSInterpreterSimple(MongoClient mongoClient) {
+        this(mongoClient, false);
+    }
+    
+    public JSInterpreterSimple(MongoClient mongoClient, boolean verbose) {
         try {
             this.mongoClient = mongoClient;
             this.ownsMongoClient = false;
+            this.verbose = verbose;
             init();
         } catch (Exception e) {
             logger.error("JavaScript interpreter initialization failed", e);
@@ -46,7 +57,7 @@ public class JSInterpreterSimple implements AutoCloseable {
     }
     
     private void init() {
-        this.translator = new MongoCommandTranslator(mongoClient);
+        this.translator = new MongoCommandTranslator(mongoClient, verbose);
         this.objectMapper = new ObjectMapper();
         this.objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
         

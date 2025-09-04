@@ -23,20 +23,22 @@ public class MShell {
     private final JSInterpreterSimple interpreter;
     private final ShardQueryExecutor shardExecutor;
     private final boolean executeOnShards;
+    private final boolean verbose;
     private final String connectionString;
     
-    public MShell(String connectionString, boolean executeOnShards) {
+    public MShell(String connectionString, boolean executeOnShards, boolean verbose) {
         this.connectionString = connectionString;
         this.executeOnShards = executeOnShards;
+        this.verbose = verbose;
         
         try {
-            this.interpreter = new JSInterpreterSimple(connectionString);
+            this.interpreter = new JSInterpreterSimple(connectionString, verbose);
         } catch (Exception e) {
             logger.error("Failed to initialize JavaScript interpreter", e);
             throw new RuntimeException("Failed to initialize JavaScript interpreter: " + e.getMessage(), e);
         }
         
-        this.shardExecutor = executeOnShards ? new ShardQueryExecutor(connectionString) : null;
+        this.shardExecutor = executeOnShards ? new ShardQueryExecutor(connectionString, verbose) : null;
     }
     
     public void runInteractive() throws IOException {
@@ -176,6 +178,7 @@ public class MShell {
         options.addOption("f", "file", true, "Execute JavaScript file");
         options.addOption("e", "eval", true, "Evaluate JavaScript expression");
         options.addOption("s", "shards", false, "Execute queries on all shards individually");
+        options.addOption("v", "verbose", false, "Show verbose output including queries sent to MongoDB");
         options.addOption(null, "help", false, "Show help");
         
         CommandLineParser parser = new DefaultParser();
@@ -204,7 +207,9 @@ public class MShell {
             }
             
             boolean executeOnShards = cmd.hasOption("shards");
+            boolean verbose = cmd.hasOption("verbose");
             logger.info("Execute on shards: {}", executeOnShards);
+            logger.info("Verbose mode: {}", verbose);
             
             // Only test connection if we're doing interactive mode or shard mode
             // Simple evaluations may not need MongoDB
@@ -220,7 +225,7 @@ public class MShell {
                 }
             }
             
-            MShell shell = new MShell(connectionString, executeOnShards);
+            MShell shell = new MShell(connectionString, executeOnShards, verbose);
             
             if (cmd.hasOption("file")) {
                 shell.executeFile(cmd.getOptionValue("file"));
@@ -269,6 +274,7 @@ public class MShell {
         System.out.println("  -e, --eval <expression>  Evaluate JavaScript expression");
         System.out.println("  -f, --file <file>        Execute JavaScript file");
         System.out.println("  -s, --shards             Execute queries on all shards individually");
+        System.out.println("  -v, --verbose            Show verbose output including queries sent to MongoDB");
         System.out.println("  --help                   Show this help message");
     }
     
