@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class MShell {
@@ -43,8 +44,12 @@ public class MShell {
                 .system(true)
                 .build();
                 
+        // Set up persistent command history like mongo shell
+        Path historyFile = Paths.get(System.getProperty("user.home"), ".mshell_history");
+        
         LineReader reader = LineReaderBuilder.builder()
                 .terminal(terminal)
+                .variable(LineReader.HISTORY_FILE, historyFile)
                 .build();
                 
         System.out.println("MongoDB Shell (mshell) - Java Edition");
