@@ -9,6 +9,7 @@ import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.mozilla.javascript.regexp.NativeRegExp;
+import org.mozilla.javascript.NativeObject;
 
 import java.util.*;
 import java.util.regex.Pattern;
@@ -233,10 +234,20 @@ public class MongoCommandTranslator {
             System.out.println("VERBOSE: countDocuments query:");
             System.out.println("  Collection: " + currentDatabase.getName() + "." + collectionName);
             try {
-                System.out.println("  Filter: " + filterDoc.toJson());
+                // Use ObjectMapper for better JSON serialization
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                mapper.enable(com.fasterxml.jackson.databind.SerializationFeature.INDENT_OUTPUT);
+                String filterJson = mapper.writeValueAsString(filterDoc);
+                System.out.println("  Filter: " + filterJson);
             } catch (Exception e) {
-                // Fallback if toJson() fails
-                System.out.println("  Filter: " + filterDoc.toString());
+                // Fallback to Document's toJson()
+                try {
+                    System.out.println("  Filter: " + filterDoc.toJson());
+                } catch (Exception e2) {
+                    // Final fallback
+                    System.out.println("  Filter: " + filterDoc.toString());
+                    logger.debug("Failed to serialize filter for verbose output", e2);
+                }
             }
         }
         
@@ -369,10 +380,18 @@ public class MongoCommandTranslator {
             return null;
         }
         
-        // Handle JavaScript regex objects
+        if (verbose) {
+            logger.debug("Converting value: {} (type: {})", value, value.getClass().getName());
+        }
+        
+        // Handle JavaScript regex objects (direct NativeRegExp)
         if (value instanceof NativeRegExp) {
             NativeRegExp nativeRegex = (NativeRegExp) value;
             String pattern = nativeRegex.toString();
+            
+            if (verbose) {
+                logger.debug("Found NativeRegExp: {}", pattern);
+            }
             
             // Extract pattern and flags from /pattern/flags format
             if (pattern.startsWith("/") && pattern.lastIndexOf("/") > 0) {
@@ -385,6 +404,10 @@ public class MongoCommandTranslator {
                 if (!flags.isEmpty()) {
                     regexDoc.put("$options", flags);
                 }
+                
+                if (verbose) {
+                    logger.debug("Converted to MongoDB regex: {}", regexDoc);
+                }
                 return regexDoc;
             }
             
@@ -392,8 +415,138 @@ public class MongoCommandTranslator {
             return new Document("$regex", pattern);
         }
         
+        // Handle NativeObject that might contain regex literals
+        if (value instanceof NativeObject) {
+            NativeObject nativeObj = (NativeObject) value;
+            
+            if (verbose) {
+                logger.debug("Found NativeObject: {}, className: {}", nativeObj, nativeObj.getClassName());
+                // Debug: let's see what properties this object has
+                Object[] propIds = nativeObj.getIds();
+                logger.debug("NativeObject properties: {}", java.util.Arrays.toString(propIds));
+            }
+            
+            // Check if this has a $regex property (JavaScript { "$regex": /:pattern$/ } object)  
+            Object regexValue = nativeObj.get("$regex", nativeObj);
+            if (regexValue != null && !"undefined".equals(regexValue.toString())) {
+                if (verbose) {
+                    logger.debug("Found $regex property with value: {} ({})", regexValue, regexValue.getClass().getName());
+                }
+                
+                // The value of $regex should be a JavaScript RegExp object
+                String regexPattern = null;
+                String regexFlags = "";
+                
+                // Check if the value is another NativeObject (the actual regex)
+                if (regexValue instanceof NativeObject) {
+                    NativeObject regexObj = (NativeObject) regexValue;
+                    String regexObjString = regexObj.toString();
+                    
+                    if (verbose) {
+                        logger.debug("$regex value is NativeObject: {}, className: {}", regexObjString, regexObj.getClassName());
+                    }
+                    
+                    // Try to get source and flags properties
+                    try {
+                        Object sourceObj = regexObj.get("source", regexObj);
+                        Object flagsObj = regexObj.get("flags", regexObj);
+                        if (sourceObj != null) regexPattern = sourceObj.toString();
+                        if (flagsObj != null) regexFlags = flagsObj.toString();
+                        
+                        if (verbose) {
+                            logger.debug("Extracted from RegExp properties - source: {}, flags: {}", regexPattern, regexFlags);
+                        }
+                    } catch (Exception e) {
+                        // Fallback: parse from toString if it looks like a regex
+                        if (regexObjString.matches("/.*?/[gimsuyx]*")) {
+                            int lastSlash = regexObjString.lastIndexOf('/');
+                            if (lastSlash > 0) {
+                                regexPattern = regexObjString.substring(1, lastSlash);
+                                regexFlags = regexObjString.substring(lastSlash + 1);
+                                
+                                if (verbose) {
+                                    logger.debug("Parsed from toString - pattern: {}, flags: {}", regexPattern, regexFlags);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Direct string value
+                    String regexStr = regexValue.toString();
+                    if (regexStr.matches("/.*?/[gimsuyx]*")) {
+                        int lastSlash = regexStr.lastIndexOf('/');
+                        if (lastSlash > 0) {
+                            regexPattern = regexStr.substring(1, lastSlash);
+                            regexFlags = regexStr.substring(lastSlash + 1);
+                        }
+                    } else {
+                        regexPattern = regexStr;
+                    }
+                }
+                
+                if (regexPattern != null) {
+                    Document regexDoc = new Document("$regex", regexPattern);
+                    if (regexFlags != null && !regexFlags.isEmpty()) {
+                        regexDoc.put("$options", regexFlags);
+                    }
+                    
+                    if (verbose) {
+                        logger.debug("Created MongoDB regex document: {}", regexDoc);
+                    }
+                    
+                    return regexDoc;
+                }
+            }
+            
+            // Check if this is a direct RegExp object by examining its class name or toString
+            String className = nativeObj.getClassName();
+            String objString = nativeObj.toString();
+            
+            if ("RegExp".equals(className) || objString.matches("/.*?/[gimsuyx]*")) {
+                // This is a JavaScript RegExp object
+                String source = null;
+                String flags = "";
+                
+                // Try to extract from properties first
+                try {
+                    Object sourceObj = nativeObj.get("source", nativeObj);
+                    Object flagsObj = nativeObj.get("flags", nativeObj);
+                    if (sourceObj != null) source = sourceObj.toString();
+                    if (flagsObj != null) flags = flagsObj.toString();
+                } catch (Exception e) {
+                    // Fallback: parse from toString if it looks like a regex
+                    if (objString.matches("/.*?/[gimsuyx]*")) {
+                        int lastSlash = objString.lastIndexOf('/');
+                        if (lastSlash > 0) {
+                            source = objString.substring(1, lastSlash);
+                            flags = objString.substring(lastSlash + 1);
+                        }
+                    }
+                }
+                
+                if (verbose) {
+                    logger.debug("Found direct RegExp - source: {}, flags: {}", source, flags);
+                }
+                
+                if (source != null) {
+                    Document regexDoc = new Document("$regex", source);
+                    if (flags != null && !flags.isEmpty()) {
+                        regexDoc.put("$options", flags);
+                    }
+                    
+                    if (verbose) {
+                        logger.debug("Converted direct RegExp to MongoDB regex: {}", regexDoc);
+                    }
+                    return regexDoc;
+                }
+            }
+        }
+        
         // Handle other Rhino objects that need conversion
         if (value.getClass().getName().startsWith("org.mozilla.javascript.")) {
+            if (verbose) {
+                logger.debug("Found other Rhino object: {} ({})", value.toString(), value.getClass().getName());
+            }
             // For other JavaScript objects, try to convert to string
             return value.toString();
         }
