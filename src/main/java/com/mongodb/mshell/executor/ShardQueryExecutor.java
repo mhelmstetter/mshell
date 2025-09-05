@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.text.DecimalFormat;
 
 public class ShardQueryExecutor implements AutoCloseable {
     private static final Logger logger = LoggerFactory.getLogger(ShardQueryExecutor.class);
@@ -41,7 +42,7 @@ public class ShardQueryExecutor implements AutoCloseable {
             logger.debug("Populating shard MongoDB clients...");
             this.shardClient.populateShardMongoClients();
             
-            this.shardInterpreters = new HashMap<>();
+            this.shardInterpreters = new LinkedHashMap<>();
             this.executorService = Executors.newCachedThreadPool();
             
             logger.debug("Initializing shard connections...");
@@ -59,9 +60,12 @@ public class ShardQueryExecutor implements AutoCloseable {
         try {
             Map<String, MongoClient> shardClients = shardClient.getShardMongoClients();
             
-            for (Map.Entry<String, MongoClient> entry : shardClients.entrySet()) {
-                String shardName = entry.getKey();
-                MongoClient mongoClient = entry.getValue();
+            // Sort shard names for consistent ordering (rollups-3-shard-0, rollups-3-shard-1, etc.)
+            List<String> sortedShardNames = new ArrayList<>(shardClients.keySet());
+            sortedShardNames.sort(String::compareTo);
+            
+            for (String shardName : sortedShardNames) {
+                MongoClient mongoClient = shardClients.get(shardName);
                 
                 // Use the existing MongoClient that ShardClient created with proper connection params
                 JSInterpreterSimple interpreter = new JSInterpreterSimple(mongoClient, verbose);
@@ -127,7 +131,8 @@ public class ShardQueryExecutor implements AutoCloseable {
         } else if (result.result != null) {
             if (result.result instanceof Collection) {
                 Collection<?> collection = (Collection<?>) result.result;
-                System.out.println("Results: " + collection.size() + " document(s)");
+                DecimalFormat formatter = new DecimalFormat("#,###");
+                System.out.println("Results: " + formatter.format(collection.size()) + " document(s)");
                 for (Object item : collection) {
                     System.out.println(formatResult(item));
                 }
@@ -142,6 +147,12 @@ public class ShardQueryExecutor implements AutoCloseable {
     private String formatResult(Object result) {
         if (result == null) {
             return "null";
+        }
+        
+        // Format numbers with commas
+        if (result instanceof Number) {
+            DecimalFormat formatter = new DecimalFormat("#,###");
+            return formatter.format(result);
         }
         
         try {

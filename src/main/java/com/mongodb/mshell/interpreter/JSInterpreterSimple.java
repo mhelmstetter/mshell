@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import java.text.DecimalFormat;
 
 import org.mozilla.javascript.*;
 
@@ -225,6 +226,11 @@ public class JSInterpreterSimple implements AutoCloseable {
             }
             if (result instanceof CursorProxySimple) {
                 return result.toString();
+            }
+            // Format numbers with commas
+            if (result instanceof Number) {
+                DecimalFormat formatter = new DecimalFormat("#,###");
+                return formatter.format(result);
             }
             return objectMapper.writeValueAsString(result);
         } catch (Exception e) {
