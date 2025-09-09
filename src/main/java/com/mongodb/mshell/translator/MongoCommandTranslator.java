@@ -87,6 +87,13 @@ public class MongoCommandTranslator {
         return currentDatabase.runCommand(new Document("collStats", collectionName));
     }
     
+    public Document getProfilingStatus() {
+        if (currentDatabase == null) {
+            return new Document("error", "No database selected");
+        }
+        return currentDatabase.runCommand(new Document("profile", -1));
+    }
+    
     public Object runCommand(Object command) {
         if (currentDatabase == null) {
             return "No database selected";
@@ -253,6 +260,21 @@ public class MongoCommandTranslator {
         
         return currentDatabase.getCollection(collectionName)
             .countDocuments(filterDoc);
+    }
+    
+    public long estimatedDocumentCount(String collectionName) {
+        if (currentDatabase == null) {
+            return 0;
+        }
+        
+        if (verbose) {
+            System.out.println("VERBOSE: estimatedDocumentCount query:");
+            System.out.println("  Collection: " + currentDatabase.getName() + "." + collectionName);
+            System.out.println("  Using metadata estimate (no document scan)");
+        }
+        
+        return currentDatabase.getCollection(collectionName)
+            .estimatedDocumentCount();
     }
     
     public List<Document> aggregate(String collectionName, Object pipeline) {

@@ -69,6 +69,19 @@ public class CollectionProxySimple extends ScriptableObject {
                 };
                 
             case "count":
+                return new BaseFunction() {
+                    @Override
+                    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                        if (args.length > 0 && args[0] != null) {
+                            // If filter is provided, use countDocuments
+                            return translator.countDocuments(collectionName, args[0]);
+                        } else {
+                            // No filter, use estimatedDocumentCount for better performance
+                            return translator.estimatedDocumentCount(collectionName);
+                        }
+                    }
+                };
+                
             case "countDocuments":
                 return new BaseFunction() {
                     @Override
@@ -165,7 +178,8 @@ public class CollectionProxySimple extends ScriptableObject {
     }
     
     public long count() {
-        return count(null);
+        // Use estimatedDocumentCount when no filter is provided for better performance
+        return translator.estimatedDocumentCount(collectionName);
     }
     
     public long countDocuments(Object filter) {

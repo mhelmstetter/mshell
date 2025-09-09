@@ -15,6 +15,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Set;
+import java.util.HashSet;
 
 public class MShell {
     private static final Logger logger = LoggerFactory.getLogger(MShell.class);
@@ -25,11 +27,13 @@ public class MShell {
     private final boolean executeOnShards;
     private final boolean verbose;
     private final String connectionString;
+    private final Set<Integer> shardIndices;
     
-    public MShell(String connectionString, boolean executeOnShards, boolean verbose) {
+    public MShell(String connectionString, boolean executeOnShards, boolean verbose, Set<Integer> shardIndices) {
         this.connectionString = connectionString;
         this.executeOnShards = executeOnShards;
         this.verbose = verbose;
+        this.shardIndices = shardIndices;
         
         try {
             this.interpreter = new JSInterpreterSimple(connectionString, verbose);
@@ -38,7 +42,7 @@ public class MShell {
             throw new RuntimeException("Failed to initialize JavaScript interpreter: " + e.getMessage(), e);
         }
         
-        this.shardExecutor = executeOnShards ? new ShardQueryExecutor(connectionString, verbose) : null;
+        this.shardExecutor = executeOnShards ? new ShardQueryExecutor(connectionString, verbose, shardIndices) : null;
     }
     
     public void runInteractive() throws IOException {
@@ -58,7 +62,11 @@ public class MShell {
         System.out.println("Type 'help()' for help, 'exit' or 'quit' to exit");
         System.out.println("Connected to: " + MaskUtil.maskConnectionString(new ConnectionString(connectionString)));
         if (executeOnShards) {
-            System.out.println("Shard execution mode: ENABLED");
+            if (shardIndices != null && !shardIndices.isEmpty()) {
+                System.out.println("Shard execution mode: ENABLED (indices: " + shardIndices + ")");
+            } else {
+                System.out.println("Shard execution mode: ENABLED (all shards)");
+            }
         }
         System.out.println();
         
@@ -112,7 +120,11 @@ public class MShell {
     public void executeCommand(String command) {
         try {
             if (executeOnShards) {
-                System.out.println("Executing on all shards:");
+                if (shardIndices != null && !shardIndices.isEmpty()) {
+                    System.out.println("Executing on selected shards (indices: " + shardIndices + "):");
+                } else {
+                    System.out.println("Executing on all shards:");
+                }
                 shardExecutor.executeOnAllShards(command);
             } else {
                 Object result = interpreter.execute(command);
@@ -177,9 +189,13 @@ public class MShell {
         
         options.addOption("f", "file", true, "Execute JavaScript file");
         options.addOption("e", "eval", true, "Evaluate JavaScript expression");
-        options.addOption("s", "shards", false, "Execute queries on all shards individually");
+        options.addOption("s", "shards", true, "Execute queries on shards (optionally specify indices, e.g., 0,5)");
         options.addOption("v", "verbose", false, "Show verbose output including queries sent to MongoDB");
         options.addOption(null, "help", false, "Show help");
+        
+        // Make the -s/--shards option accept optional argument
+        Option shardsOption = options.getOption("s");
+        shardsOption.setOptionalArg(true);
         
         CommandLineParser parser = new DefaultParser();
         
@@ -208,6 +224,27 @@ public class MShell {
             
             boolean executeOnShards = cmd.hasOption("shards");
             boolean verbose = cmd.hasOption("verbose");
+            
+            // Parse shard indices if provided
+            Set<Integer> shardIndices = null;
+            if (executeOnShards) {
+                String shardValue = cmd.getOptionValue("shards");
+                if (shardValue != null && !shardValue.isEmpty()) {
+                    shardIndices = new HashSet<>();
+                    try {
+                        for (String index : shardValue.split(",")) {
+                            shardIndices.add(Integer.parseInt(index.trim()));
+                        }
+                        logger.info("Using specific shard indices: {}", shardIndices);
+                    } catch (NumberFormatException e) {
+                        System.err.println("Invalid shard indices format. Use comma-separated numbers, e.g., 0,5");
+                        System.exit(1);
+                    }
+                } else {
+                    logger.info("Execute on all shards");
+                }
+            }
+            
             logger.info("Execute on shards: {}", executeOnShards);
             logger.info("Verbose mode: {}", verbose);
             
@@ -225,7 +262,7 @@ public class MShell {
                 }
             }
             
-            MShell shell = new MShell(connectionString, executeOnShards, verbose);
+            MShell shell = new MShell(connectionString, executeOnShards, verbose, shardIndices);
             
             if (cmd.hasOption("file")) {
                 shell.executeFile(cmd.getOptionValue("file"));
@@ -273,7 +310,7 @@ public class MShell {
         System.out.println("Options:");
         System.out.println("  -e, --eval <expression>  Evaluate JavaScript expression");
         System.out.println("  -f, --file <file>        Execute JavaScript file");
-        System.out.println("  -s, --shards             Execute queries on all shards individually");
+        System.out.println("  -s, --shards [indices]   Execute queries on shards (optionally specify indices, e.g., 0,5)");
         System.out.println("  -v, --verbose            Show verbose output including queries sent to MongoDB");
         System.out.println("  --help                   Show this help message");
     }

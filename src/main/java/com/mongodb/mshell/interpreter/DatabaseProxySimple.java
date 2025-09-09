@@ -82,6 +82,14 @@ public class DatabaseProxySimple extends ScriptableObject {
                     }
                 };
                 
+            case "getProfilingStatus":
+                return new BaseFunction() {
+                    @Override
+                    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                        return translator.getProfilingStatus();
+                    }
+                };
+                
             case "getCollection":
                 return new BaseFunction() {
                     @Override

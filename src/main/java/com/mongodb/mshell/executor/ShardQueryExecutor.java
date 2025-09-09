@@ -18,15 +18,21 @@ public class ShardQueryExecutor implements AutoCloseable {
     private final Map<String, JSInterpreterSimple> shardInterpreters;
     private final ExecutorService executorService;
     private final boolean verbose;
+    private final Set<Integer> shardIndices;
     
     public ShardQueryExecutor(String connectionString) {
-        this(connectionString, false);
+        this(connectionString, false, null);
     }
     
     public ShardQueryExecutor(String connectionString, boolean verbose) {
+        this(connectionString, verbose, null);
+    }
+    
+    public ShardQueryExecutor(String connectionString, boolean verbose, Set<Integer> shardIndices) {
         try {
             logger.info("Initializing ShardQueryExecutor with connection: '{}'", connectionString);
             this.verbose = verbose;
+            this.shardIndices = shardIndices;
             String sourceClusterId = "source";
             
             logger.debug("Creating ShardClient with name='{}' and clusterUri='{}'", sourceClusterId, connectionString);
@@ -63,6 +69,23 @@ public class ShardQueryExecutor implements AutoCloseable {
             // Sort shard names for consistent ordering (rollups-3-shard-0, rollups-3-shard-1, etc.)
             List<String> sortedShardNames = new ArrayList<>(shardClients.keySet());
             sortedShardNames.sort(String::compareTo);
+            
+            // Filter shards based on indices if provided
+            if (shardIndices != null && !shardIndices.isEmpty()) {
+                List<String> filteredShardNames = new ArrayList<>();
+                for (Integer index : shardIndices) {
+                    if (index >= 0 && index < sortedShardNames.size()) {
+                        filteredShardNames.add(sortedShardNames.get(index));
+                    } else {
+                        logger.warn("Shard index {} is out of range (0-{})", index, sortedShardNames.size() - 1);
+                    }
+                }
+                sortedShardNames = filteredShardNames;
+                
+                if (sortedShardNames.isEmpty()) {
+                    throw new RuntimeException("No valid shard indices provided");
+                }
+            }
             
             for (String shardName : sortedShardNames) {
                 MongoClient mongoClient = shardClients.get(shardName);
