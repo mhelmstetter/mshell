@@ -91,6 +91,22 @@ public class CollectionProxySimple extends ScriptableObject {
                     }
                 };
                 
+            case "getIndexes":
+                return new BaseFunction() {
+                    @Override
+                    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                        return translator.getIndexes(collectionName);
+                    }
+                };
+                
+            case "getIndexKeys":
+                return new BaseFunction() {
+                    @Override
+                    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                        return translator.getIndexKeys(collectionName);
+                    }
+                };
+                
             default:
                 return super.get(name, start);
         }
@@ -216,6 +232,10 @@ public class CollectionProxySimple extends ScriptableObject {
     
     public Object getIndexes() {
         return translator.getIndexes(collectionName);
+    }
+    
+    public Object getIndexKeys() {
+        return translator.getIndexKeys(collectionName);
     }
     
     public Object stats() {

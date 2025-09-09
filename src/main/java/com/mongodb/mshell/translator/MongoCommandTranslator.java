@@ -347,6 +347,24 @@ public class MongoCommandTranslator {
         return indexes;
     }
     
+    public List<Document> getIndexKeys(String collectionName) {
+        if (currentDatabase == null) {
+            return Collections.emptyList();
+        }
+        
+        List<Document> indexKeys = new ArrayList<>();
+        currentDatabase.getCollection(collectionName)
+            .listIndexes()
+            .forEach(index -> {
+                Document keys = (Document) index.get("key");
+                if (keys != null) {
+                    indexKeys.add(keys);
+                }
+            });
+            
+        return indexKeys;
+    }
+    
     public Object executeShowCommand(String what) {
         switch (what.toLowerCase()) {
             case "dbs":
