@@ -33,6 +33,80 @@ public class CursorProxySimple extends ScriptableObject {
         return "Cursor";
     }
     
+    @Override
+    public Object get(String name, Scriptable start) {
+        logger.debug("CursorProxySimple.get: {}", name);
+        
+        switch (name) {
+            case "sort":
+                return new BaseFunction() {
+                    @Override
+                    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                        if (args.length > 0) {
+                            sort(args[0]);
+                        }
+                        return CursorProxySimple.this;
+                    }
+                };
+            case "limit":
+                return new BaseFunction() {
+                    @Override
+                    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                        if (args.length > 0 && args[0] instanceof Number) {
+                            limit(((Number) args[0]).intValue());
+                        }
+                        return CursorProxySimple.this;
+                    }
+                };
+            case "skip":
+                return new BaseFunction() {
+                    @Override
+                    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                        if (args.length > 0 && args[0] instanceof Number) {
+                            skip(((Number) args[0]).intValue());
+                        }
+                        return CursorProxySimple.this;
+                    }
+                };
+            case "count":
+                return new BaseFunction() {
+                    @Override
+                    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                        return count();
+                    }
+                };
+            case "toArray":
+                return new BaseFunction() {
+                    @Override
+                    public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                        List<Document> docs = toArray();
+                        // Convert to JavaScript array
+                        Scriptable array = cx.newArray(scope, docs.size());
+                        for (int i = 0; i < docs.size(); i++) {
+                            array.put(i, array, docs.get(i));
+                        }
+                        return array;
+                    }
+                };
+            default:
+                return super.get(name, start);
+        }
+    }
+    
+    @Override
+    public boolean has(String name, Scriptable start) {
+        switch (name) {
+            case "sort":
+            case "limit":
+            case "skip":
+            case "count":
+            case "toArray":
+                return true;
+            default:
+                return super.has(name, start);
+        }
+    }
+    
     private void ensureCursor() {
         if (!executed) {
             batchCursor = translator.getBatchCursor(collectionName, filter, projection, sort, limit, skip);

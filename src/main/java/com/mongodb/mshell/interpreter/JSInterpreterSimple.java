@@ -80,6 +80,12 @@ public class JSInterpreterSimple implements AutoCloseable {
             ScriptableObject.putProperty(jsScope, "show", new ShowFunction());
             ScriptableObject.putProperty(jsScope, "help", new HelpFunction());
             ScriptableObject.putProperty(jsScope, "it", new ItFunction());
+
+            // Add replica set proxy
+            ReplicaSetProxySimple rsProxy = new ReplicaSetProxySimple(mongoClient);
+            rsProxy.setParentScope(jsScope);
+            rsProxy.setPrototype(ScriptableObject.getObjectPrototype(jsScope));
+            ScriptableObject.putProperty(jsScope, "rs", rsProxy);
             
             // Initialize built-in MongoDB shell functions
             jsContext.evaluateString(jsScope, initializeMongoShellFunctions(), "init", 1, null);
